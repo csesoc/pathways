@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 '''
-   Copyright 2013 George Caley
+   Copyright 2019 UNSW CSESoc
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 '''
 
 import datetime, json, os, re, sqlite3, time, requests
-import urllib.request,  urllib.parse
-from urllib.error import HTTPError
 from bs4 import BeautifulSoup
 from flask import Flask, request, send_from_directory, g
 
@@ -27,6 +25,15 @@ LOG_FILENAME = "pathways.log"
 TIMETABLE_DIR = "courses"
 TIMETABLE_REQUEST_TIMEOUT = 10 # seconds
 TIMETABLE_CACHE_TIME = 60*60*6 # 6 hours
+DAY_TO_INDEX = {
+    "Mon": 0,
+    "Tue": 1,
+    "Wed": 2,
+    "Thu": 3,
+    "Fri": 4,
+    "Sat": 5,
+    "Sun": 6
+}
 
 CURRENT_YEAR = "2018"
 
@@ -52,18 +59,13 @@ def log_request():
 # fetches the timetable file for the given course
 # returns the HTML data if successful, empty string if HTTP 404 (to prevent retries),
 # None if any other HTTP error (likely their site is broken, or connection problems)
-'''
-    Need to verify this request gives the HTML lol
-'''
 def fetch_timetable_course(code):
     print("Fetching fresh timetable for " + str(code))
     try:
         resp = requests.get("http://www.timetable.unsw.edu.au/" + CURRENT_YEAR + "/" + str(code) + ".html").text
         return resp
-    except HTTPError as http_err:
-        print("HTTP Error encountered " + str(http_err))
     except Exception as err:
-        print("Other Error encountered " + str(err)) 
+        print("Error encountered " + str(err)) 
     return None
 
 # returns a tuple of (timetable_data, time)
@@ -88,23 +90,6 @@ def get_timetable_course_data(code):
         with open(filename, "w") as f:
             f.write(data)
     return (data, time.time())
-
-# does what it says on the tin
-'''
-  This could be done as a global var or even just a list and get the index of a value
-  Will convert eventually
-'''
-def day_to_index(day):
-    indexes = {
-        "Mon": 0,
-        "Tue": 1,
-        "Wed": 2,
-        "Thu": 3,
-        "Fri": 4,
-        "Sat": 5,
-        "Sun": 6
-    }
-    return indexes[day]
 
 # returns a tuple of (timetable_data, time)
 # timetable_data is the timetable data for the given course, as a dictionary
@@ -162,17 +147,15 @@ def get_timetable_course_schedule(code):
                 day = match.group(1)
 
                 if start_minute != 0 or finish_minute != 0:
-                    print("wtf")
-                    print(info)
+                    print("An unexpected error has occurred: " + str(info))
 
                 # add thing
-                day_index = day_to_index(day)
                 details = {
                     "startHour": start,
                     "finishHour": finish,
                     "size": size,
                     "capacity": capacity,
-                    "day": day_index,
+                    "day": DAY_TO_INDEX[day],
                     "status": status,
                     "name": name,
                     "code": code,
@@ -308,4 +291,5 @@ def static_from_root():
     return send_from_directory(app.static_folder, "index.html")
 
 if __name__ == "__main__":
+    os.system("python scraper/unsw_scraper.py")
     app.run(debug=True, port=7001)
